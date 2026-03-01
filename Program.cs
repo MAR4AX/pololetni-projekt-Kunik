@@ -1,6 +1,10 @@
-﻿Library library = new Library("knihovna");
+﻿using System.Globalization;
+using System.Reflection.PortableExecutable;
+
+Library library = new Library("Smíchov");
 library.NewEmployee("Marek", "Kuník", true, 0, "email@example.com", "heslo123");
 library.NewBook("Proměna", "Franz Kafka", "9788072534678", 1915, "novela", 100, "0");
+library.NewReader("Josef", "Novak", false, library.readers.Count+1, "pepa.novak@gmail.com", "pepa8");
 
 string LogInContact;
 string LogInPassword;
@@ -61,18 +65,124 @@ while (true)
                     if (user.isEmployee)
                     {
                         Console.Clear();
-                        Console.WriteLine("[N]Novy ctenar       [Z]Zablokovat ctenare");
-                    }
-                    break; 
+                        Console.WriteLine("[V]Vyhledat ctenare       [N]Novy ctenar       [Z]Zablokovat ctenare");
+                        var klavesa = Console.ReadKey();
+                        switch (klavesa.Key)
+                        {
+                            case (ConsoleKey.V) :
+                                Console.Clear();
+                                Console.WriteLine("zadejte údaj čtenáře");
+                                string Usearch = Console.ReadLine();
+                                foreach (User reader in library.readers) 
+                                {
+                                    if(Usearch == reader.name || Usearch == reader.surname ||  Usearch ==$"{reader.readerNumber}" || Usearch == reader.contact)
+                                    {
+                                        Console.WriteLine($"jmeno: {reader.name}, prijmeni: {reader.surname}, cislo karticky: {reader.readerNumber}, kontakt: {reader.contact}");
+                                    }
+                                    Console.ReadKey();
+                                    break ;
+                                }
+                                break;
 
+                            case (ConsoleKey.N) :
+                                Console.Clear() ;
+                                Console.WriteLine("zadejte jmeno noveho uctu:");
+                                string inputName = Console.ReadLine();
+                                Console.WriteLine("zadejte prijmeni noveho uctu");
+                                string inputSurname = Console.ReadLine();
+                                Console.WriteLine("zadejte kontakt noveho uctu");
+                                string inputContact = Console.ReadLine();
+                                Console.WriteLine("zadejte heslo noveho uctu");
+                                string inputPassword = Console.ReadLine();
+                                library.NewReader(inputName, inputSurname, false, library.readers.Count+1, inputContact, inputPassword);
+                                foreach (User reader in library.readers)
+                                {
+                                    if(inputContact  == reader.contact)
+                                    {
+                                        Console.WriteLine($"jmeno: {reader.name}, prijmeni: {reader.surname}, cislo karticky: {reader.readerNumber}, kontakt: {reader.contact}");
+                                    }
+                                    Console.ReadKey();
+                                    break;
+                                }
+                                break;
+                            case (ConsoleKey.Z) :
+                                Console.WriteLine("zadejte cislo karticky ctenare ktereho chcete smazat");
+                                int inputNumber = Convert.ToInt32( Console.ReadLine() );
+                                foreach (User reader in library.readers)
+                                {
+                                    if(inputNumber == reader.readerNumber)
+                                    {
+                                        Console.WriteLine($"jmeno: {reader.name}, prijmeni: {reader.surname}, cislo karticky: {reader.readerNumber}, kontakt: {reader.contact}");
+                                        Console.WriteLine();
+                                        Console.WriteLine("opravdu chcete smazat? [Y]/[N]");
+                                        var decision = Console.ReadKey();
+                                        if(decision.Key == ConsoleKey.Y)
+                                        {
+                                            library.readers.Remove(reader);
+                                        }
+                                        break;
+                                    }
+                                }
+                                break;
+                        }
+                    }
+                    break;
                 case(ConsoleKey.K) :
+                    if(user.isEmployee)
+                    {
+                        Console.Clear();
+                        Console.WriteLine("[P]Pridat knihu       [O]Odebrat knihu");
+                       var bookChoice = Console.ReadKey();
+                        switch (bookChoice.Key)
+                        {
+                            case(ConsoleKey.P) :
+                                Console.Clear();
+                                Console.WriteLine("zadejte jmeno knihy:");
+                                string inputJmeno = Console.ReadLine();
+                                Console.WriteLine("zadejte autora:");
+                                string inputAuthor = Console.ReadLine();
+                                Console.WriteLine("zadejte ISBN:");
+                                string inputISBN = Console.ReadLine();
+                                Console.WriteLine("zadejte rok vydání:");
+                                int inputYear = Convert.ToInt32( Console.ReadLine() );
+                                Console.WriteLine("zadejte žánr:");
+                                string inputGenre = Console.ReadLine();
+                                Console.WriteLine("zadejte množství exemplářů:");
+                                int inputExemplars = Convert.ToInt32( Console.ReadLine() );
+                                library.NewBook(inputJmeno, inputAuthor, inputISBN, inputYear, inputGenre, inputExemplars, "0");
+                                foreach(Book book in library.books)
+                                {
+                                    if(inputISBN == book.ISBN)
+                                    {
+                                        Console.WriteLine($"jmeno: {book.name}, autor: {book.author}, ISBN: {book.ISBN}, rok vydání: {book.year}, žánr: {book.genre}, exemplářů na skladě: {book.exemplars}");
+                                    }
+                                }
+                                break;
+
+                            case(ConsoleKey.O) :
+                                Console.WriteLine("zadejte ISBN knihy:");
+                                string inputRemove = Console.ReadLine();
+                                foreach(Book book in library.books)
+                                    if(inputRemove == book.ISBN)
+                                    {
+                                        Console.WriteLine($"jmeno: {book.name}, autor: {book.author}, ISBN: {book.ISBN}, rok vydání: {book.year}, žánr: {book.genre}, exemplářů na skladě: {book.exemplars}");
+                                        Console.WriteLine();
+                                        Console.WriteLine("opravdu chcete smazat? [Y]/[N]");
+                                        var bookDecision = Console.ReadKey();
+                                        if (bookDecision.Key == ConsoleKey.Y)
+                                        {
+                                            library.books.Remove(book);
+                                        }
+                                        break ;
+                                    }
+                                break;
+                        }
+                    }
                     break;
             }
         }
     }
 }
-
-
 class Library
 {
     public string name;
