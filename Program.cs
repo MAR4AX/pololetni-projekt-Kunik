@@ -8,12 +8,12 @@ library.NewReader("Josef", "Novak", false, library.readers.Count+1, "pepa.novak@
 
 string LogInContact;
 string LogInPassword;
+while (true)
+{
     Console.WriteLine("Zadejte e-mail nebo telefonní číslo");
     LogInContact = Console.ReadLine();
     Console.WriteLine("Zadejte heslo");
     LogInPassword = Console.ReadLine();
-while (true)
-{
 
     foreach (User user in library.users)
     {
@@ -29,6 +29,7 @@ while (true)
                 Console.WriteLine("[C]Čtenáři");
                 Console.WriteLine("[K]Knihy");
             }
+            Console.WriteLine("[O]Odhlásit se");
             var key = Console.ReadKey();
 
             switch (key.Key)
@@ -179,6 +180,11 @@ while (true)
                         }
                     }
                     break;
+                case (ConsoleKey.O):
+                    {
+                        Console.Clear();
+                        break;
+                    }
             }
         }
     }
