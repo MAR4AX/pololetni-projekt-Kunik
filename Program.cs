@@ -1,9 +1,29 @@
 using System.Globalization;
+using MongoDB.Driver;
+using MongoDB.Bson;
+
+
+var connectionString = "mongodb+srv://marekkunik:Sk1b1d1_H4wkTu4h@pololetniprojekt.wmxdz4s.mongodb.net/?appName=PololetniProjekt";
+var client = new MongoClient(connectionString);
+var db = client.GetDatabase("PololetniProjekt");
+
+var colUsers      = db.GetCollection<User>("Users");
+var colReaders    = db.GetCollection<User>("Readers");
+var colEmployees  = db.GetCollection<User>("Employees");
+var colBooks      = db.GetCollection<Book>("Books");
+var colExemplars  = db.GetCollection<Book>("ExemplarsList");
+var colVypujcky   = db.GetCollection<Vypujcka>("Vypujcky");
+var colRezervace  = db.GetCollection<Rezervace>("Rezervace");
+
 
 Library library = new Library("Smíchov");
-library.NewEmployee("Marek", "Kuník", true, 0, "email@example.com", "heslo123");
-library.NewBook("Proměna", "Franz Kafka", "9788072534678", 1915, "novela", 3, "0");
-library.NewReader("Josef", "Novak", false, library.readers.Count + 1, "pepa.novak@gmail.com", "pepa8");
+library.employees     = colEmployees.Find(_ => true).ToList();
+library.readers       = colReaders.Find(_ => true).ToList();
+library.users         = colUsers.Find(_ => true).ToList();
+library.books         = colBooks.Find(_ => true).ToList();
+library.exemplarsList = colExemplars.Find(_ => true).ToList();
+library.vypujcky      = colVypujcky.Find(_ => true).ToList();
+library.rezervace     = colRezervace.Find(_ => true).ToList();
 
 string LogInContact;
 string LogInPassword;
@@ -44,6 +64,7 @@ while (true)
             Console.WriteLine("[C] Čtenáři");
             Console.WriteLine("[K] Knihy");
             Console.WriteLine("[P] Výpůjčky (zaměstnanec)");
+            Console.WriteLine("[S] Statistiky a přehledy");
         }
         else
         {
@@ -51,7 +72,7 @@ while (true)
         }
         Console.WriteLine("[O] Odhlásit se");
 
-        var key = Console.ReadKey(intercept: true);
+        var key = Console.ReadKey();
         Console.WriteLine();
 
         switch (key.Key)
@@ -72,12 +93,14 @@ while (true)
                         Console.WriteLine($"Dluh za pozdní vrácení: {dluh} CZK");
                     else
                         Console.WriteLine("Žádný dluh.");
+                    
+                    Console.WriteLine($"pocet aktivnivh vypujcek: {library.vypujcky.FindAll(v => v.ctenar == loggedUser && !v.vraceno).Count()}");
+                    Console.WriteLine($"pocet aktivnivh rezervaci: {library.rezervace.FindAll(r => r.ctenar == loggedUser && !r.splnena).Count()}");
                 }
                 Console.WriteLine();
                 Console.WriteLine("Zmáčkněte libovolnou klávesu...");
                 Console.ReadKey();
                 break;
-
 
             case ConsoleKey.V:
                 Console.Clear();
@@ -106,22 +129,17 @@ while (true)
                     break;
                 }
 
-
                 if (!loggedUser.isEmployee)
                 {
                     Console.WriteLine();
                     Console.WriteLine("[Y] Vypůjčit / rezervovat knihu   [N] Zpět");
-                    if (Console.ReadKey(intercept: true).Key == ConsoleKey.Y)
+                    if (Console.ReadKey().Key == ConsoleKey.Y)
                     {
                         Console.WriteLine();
 
-                        // Pokud výsledek obsahuje více knih, čtenář si vybere konkrétní ISBN.
-                        // Pokud je výsledek jediný, ISBN je doplněno automaticky.
                         string zvoleneISBN;
                         if (nalezeneKnihy.Count == 1)
-                        {
                             zvoleneISBN = nalezeneKnihy[0].ISBN;
-                        }
                         else
                         {
                             Console.Write("Zadejte ISBN knihy, kterou chcete: ");
@@ -139,10 +157,14 @@ while (true)
                         Book volnyEx = library.NajdiVolnyExemplar(zvoleneISBN);
                         if (volnyEx != null)
                         {
-
                             Vypujcka novaVyp = new Vypujcka(loggedUser, volnyEx, DateTime.Today, DateTime.Today.AddDays(30));
                             library.vypujcky.Add(novaVyp);
+                            colVypujcky.InsertOne(novaVyp); 
+
                             volnyEx.isLoaned = true;
+                            colExemplars.UpdateOne(
+                                Builders<Book>.Filter.Eq(e => e.Id, volnyEx.Id),
+                                Builders<Book>.Update.Set(e => e.isLoaned, true));
 
                             Console.WriteLine($"Výpůjčka zaregistrována: {volnyEx.name} [{volnyEx.serial_number}]");
                             Console.WriteLine($"Vrátit do: {novaVyp.datumVraceni:d}");
@@ -150,12 +172,13 @@ while (true)
                         }
                         else
                         {
-                            int aktualniPoradi = library.rezervace.FindAll(r => r.ISBN == zvoleneISBN && !r.splnena).Count + 1; //tohle mi poradil claude.ai
+                            int aktualniPoradi = library.rezervace.FindAll(r => r.ISBN == zvoleneISBN && !r.splnena).Count + 1;
                             Console.WriteLine($"Žádný exemplář není volný. Vaše pořadí ve frontě by bylo: {aktualniPoradi}.");
                             Console.WriteLine("Chcete se zařadit do fronty rezervací? [Y/N]");
                             if (Console.ReadKey().Key == ConsoleKey.Y)
                             {
-                                library.VytvorRezervaci(loggedUser, zvoleneISBN);
+                                Rezervace novaRez = library.VytvorRezervaci(loggedUser, zvoleneISBN);
+                                colRezervace.InsertOne(novaRez); 
                                 Console.WriteLine($"Rezervace vytvořena. Vaše pořadí: {aktualniPoradi}.");
                                 Console.WriteLine("Budete upozorněni, jakmile bude exemplář k dispozici.");
                             }
@@ -176,7 +199,7 @@ while (true)
                 else
                 Console.Clear();
                 Console.WriteLine("[V] Vyhledat čtenáře   [N] Nový čtenář   [Z] Smazat čtenáře");
-                var klavesa = Console.ReadKey(intercept: true);
+                var klavesa = Console.ReadKey();
                 Console.WriteLine();
                 switch (klavesa.Key)
                 {
@@ -201,15 +224,17 @@ while (true)
 
                     case ConsoleKey.N:
                         Console.Clear();
-                        Console.Write("Jméno: "); 
+                        Console.Write("Jméno: ");
                         string iName = Console.ReadLine();
-                        Console.Write("Příjmení: "); 
+                        Console.Write("Příjmení: ");
                         string iSurname = Console.ReadLine();
-                        Console.Write("Kontakt: "); 
+                        Console.Write("Kontakt: ");
                         string iContact = Console.ReadLine();
-                        Console.Write("Heslo: "); 
+                        Console.Write("Heslo: ");
                         string iPassword = Console.ReadLine();
-                        library.NewReader(iName, iSurname, false, 0, iContact, iPassword);
+                        User novyCtenar = library.NewReader(iName, iSurname, false, 0, iContact, iPassword);
+                        colReaders.InsertOne(novyCtenar);
+                        colUsers.InsertOne(novyCtenar);
                         Console.WriteLine("Čtenář přidán.");
                         Console.ReadKey();
                         break;
@@ -225,6 +250,8 @@ while (true)
                             {
                                 library.readers.Remove(toDelete);
                                 library.users.Remove(toDelete);
+                                colReaders.DeleteOne(Builders<User>.Filter.Eq(u => u.Id, toDelete.Id));
+                                colUsers.DeleteOne(Builders<User>.Filter.Eq(u => u.Id, toDelete.Id));
                                 Console.WriteLine("Smazáno.");
                             }
                         }
@@ -238,25 +265,27 @@ while (true)
                 if (!loggedUser.isEmployee) break;
                 Console.Clear();
                 Console.WriteLine("[P] Přidat knihu   [O] Odebrat knihu");
-                var bookChoice = Console.ReadKey(intercept: true);
+                var bookChoice = Console.ReadKey();
                 Console.WriteLine();
                 switch (bookChoice.Key)
                 {
                     case ConsoleKey.P:
                         Console.Clear();
-                        Console.Write("Název: "); 
+                        Console.Write("Název: ");
                         string bName = Console.ReadLine();
-                        Console.Write("Autor: "); 
+                        Console.Write("Autor: ");
                         string bAuthor = Console.ReadLine();
-                        Console.Write("ISBN: "); 
+                        Console.Write("ISBN: ");
                         string bISBN = Console.ReadLine();
-                        Console.Write("Rok vydání: "); 
+                        Console.Write("Rok vydání: ");
                         int bYear = Convert.ToInt32(Console.ReadLine());
-                        Console.Write("Žánr: "); 
+                        Console.Write("Žánr: ");
                         string bGenre = Console.ReadLine();
-                        Console.Write("Počet exemplářů: "); 
+                        Console.Write("Počet exemplářů: ");
                         int bEx = Convert.ToInt32(Console.ReadLine());
-                        library.NewBook(bName, bAuthor, bISBN, bYear, bGenre, bEx, "0");
+                        var (novaKniha, noveExemplare) = library.NewBook(bName, bAuthor, bISBN, bYear, bGenre, bEx, "0");
+                        colBooks.InsertOne(novaKniha);          
+                        colExemplars.InsertMany(noveExemplare); 
                         Console.WriteLine("Kniha přidána.");
                         Console.ReadKey();
                         break;
@@ -268,7 +297,12 @@ while (true)
                         {
                             Console.WriteLine($"{toRemove.name} – opravdu odebrat? [Y/N]");
                             if (Console.ReadKey().Key == ConsoleKey.Y)
+                            {
                                 library.books.Remove(toRemove);
+                                library.exemplarsList.RemoveAll(e => e.ISBN == remISBN);
+                                colBooks.DeleteOne(Builders<Book>.Filter.Eq(b => b.Id, toRemove.Id));
+                                colExemplars.DeleteMany(Builders<Book>.Filter.Eq(b => b.ISBN, remISBN));
+                            }
                         }
                         else Console.WriteLine("Kniha nenalezena.");
                         Console.ReadKey();
@@ -278,9 +312,17 @@ while (true)
 
             case ConsoleKey.P:
                 if (loggedUser.isEmployee)
-                    ZamestnanecVypujckyMenu(library, loggedUser);
+                    ZamestnanecVypujckyMenu(library, loggedUser, colVypujcky, colExemplars, colRezervace);
                 else
-                    CtenarVypujckyMenu(library, loggedUser);
+                    CtenarVypujckyMenu(library, loggedUser, colVypujcky, colRezervace);
+                break;
+
+            case ConsoleKey.S:
+                if (!loggedUser.isEmployee)
+                    break;
+                else
+                    Console.WriteLine($"pocet aktivních vypujcek: {library.vypujcky.FindAll(v => v.vraceno != true)}");
+                    Console.WriteLine($"pocet vypujcek po terminu: {library.vypujcky.FindAll(v => v.vraceno != true && DateTime.Today > v.datumVraceni)}");
                 break;
 
             case ConsoleKey.O:
@@ -291,12 +333,17 @@ while (true)
     }
 }
 
-static void ZamestnanecVypujckyMenu(Library library, User zamestnanec)
+
+static void ZamestnanecVypujckyMenu(
+    Library library, User zamestnanec,
+    IMongoCollection<Vypujcka> colVypujcky,
+    IMongoCollection<Book> colExemplars,
+    IMongoCollection<Rezervace> colRezervace)
 {
     Console.Clear();
     Console.WriteLine("[N] Nová výpůjčka   [R] Vrátit knihu   [E] Prodloužit výpůjčku");
     Console.WriteLine("[Z] Rezervace       [S] Sankce / dluhy čtenáře");
-    var volba = Console.ReadKey(intercept: true);
+    var volba = Console.ReadKey();
     Console.WriteLine();
 
     switch (volba.Key)
@@ -311,15 +358,15 @@ static void ZamestnanecVypujckyMenu(Library library, User zamestnanec)
             Console.Write("ISBN knihy k vypůjčení: ");
             string vypISBN = Console.ReadLine();
 
-
             Book volnyExemp = library.NajdiVolnyExemplar(vypISBN);
             if (volnyExemp == null)
             {
                 Console.WriteLine("Žádný volný exemplář. Nabídnout rezervaci? [Y/N]");
-                if (Console.ReadKey(intercept: true).Key == ConsoleKey.Y)
+                if (Console.ReadKey().Key == ConsoleKey.Y)
                 {
-                    library.VytvorRezervaci(ctenar, vypISBN);
-                    Console.WriteLine("\nRezervace vytvořena – čtenář bude zařazen do fronty.");
+                    Rezervace novaRez = library.VytvorRezervaci(ctenar, vypISBN);
+                    colRezervace.InsertOne(novaRez); 
+                    Console.WriteLine("Rezervace vytvořena – čtenář bude zařazen do fronty.");
                 }
                 Console.ReadKey();
                 break;
@@ -327,9 +374,14 @@ static void ZamestnanecVypujckyMenu(Library library, User zamestnanec)
 
             Vypujcka nova = new Vypujcka(ctenar, volnyExemp, DateTime.Today, DateTime.Today.AddDays(30));
             library.vypujcky.Add(nova);
-            volnyExemp.isLoaned = true;
+            colVypujcky.InsertOne(nova); 
 
-            Console.WriteLine($"\nVýpůjčka vytvořena: {volnyExemp.name} [{volnyExemp.serial_number}]");
+            volnyExemp.isLoaned = true;
+            colExemplars.UpdateOne(
+                Builders<Book>.Filter.Eq(e => e.Id, volnyExemp.Id),
+                Builders<Book>.Update.Set(e => e.isLoaned, true));
+
+            Console.WriteLine($"Výpůjčka vytvořena: {volnyExemp.name} [{volnyExemp.serial_number}]");
             Console.WriteLine($"Čtenář: {ctenar.name} {ctenar.surname}");
             Console.WriteLine($"Datum výpůjčky: {nova.datumVypujcky:d}  |  Vrátit do: {nova.datumVraceni:d}");
             Console.ReadKey();
@@ -343,11 +395,10 @@ static void ZamestnanecVypujckyMenu(Library library, User zamestnanec)
             Vypujcka vracena = library.vypujcky.Find(v => v.exemplar.serial_number == serial && !v.vraceno);
             if (vracena == null) { Console.WriteLine("Aktivní výpůjčka nenalezena."); Console.ReadKey(); break; }
 
-            vracena.datumSkutecnehoVraceni = DateTime.Today; 
-            vracena.vraceno = true;                          
-            vracena.exemplar.isLoaned = false;               
+            vracena.datumSkutecnehoVraceni = DateTime.Today;
+            vracena.vraceno = true;
+            vracena.exemplar.isLoaned = false;
 
-            
             if (DateTime.Today > vracena.datumVraceni)
             {
                 int dnyPoTerminu = (DateTime.Today - vracena.datumVraceni).Days;
@@ -361,7 +412,15 @@ static void ZamestnanecVypujckyMenu(Library library, User zamestnanec)
                 Console.WriteLine("Kniha vrácena včas. Žádná pokuta.");
             }
 
-            library.AktualizujRezervacePoDostupcnosti(vracena.exemplar.ISBN);
+            colVypujcky.ReplaceOne(
+                Builders<Vypujcka>.Filter.Eq(v => v.Id, vracena.Id),
+                vracena);
+
+            colExemplars.UpdateOne(
+                Builders<Book>.Filter.Eq(e => e.Id, vracena.exemplar.Id),
+                Builders<Book>.Update.Set(e => e.isLoaned, false));
+
+            library.AktualizujRezervacePoDostupcnosti(vracena.exemplar.ISBN, colRezervace);
             Console.ReadKey();
             break;
 
@@ -390,6 +449,11 @@ static void ZamestnanecVypujckyMenu(Library library, User zamestnanec)
 
             kProdlouzeni.datumVraceni = kProdlouzeni.datumVraceni.AddDays(30);
             kProdlouzeni.pocetProdlouzeni++;
+
+            colVypujcky.ReplaceOne(
+                Builders<Vypujcka>.Filter.Eq(v => v.Id, kProdlouzeni.Id),
+                kProdlouzeni);
+
             Console.WriteLine($"Výpůjčka prodloužena. Nový termín vrácení: {kProdlouzeni.datumVraceni:d}");
             Console.WriteLine($"Zbývající prodloužení: {2 - kProdlouzeni.pocetProdlouzeni}");
             Console.ReadKey();
@@ -419,14 +483,14 @@ static void ZamestnanecVypujckyMenu(Library library, User zamestnanec)
             Console.Write("Číslo kartičky čtenáře: ");
             int sankceKarticky = Convert.ToInt32(Console.ReadLine());
             User sankCtenar = library.readers.Find(r => r.readerNumber == sankceKarticky);
-            if (sankCtenar == null) 
-            { 
-                Console.WriteLine("Čtenář nenalezen."); 
-                Console.ReadKey(); 
+            if (sankCtenar == null)
+            {
+                Console.WriteLine("Čtenář nenalezen.");
+                Console.ReadKey();
                 break;
             }
 
-            var dluhy = library.vypujcky.FindAll(v => v.ctenar == sankCtenar && v.pokuta > 0 && !v.pokutaZaplacena);
+            var dluhy = library.vypujcky.FindAll(v => v.ctenar.Id == sankCtenar.Id && v.pokuta > 0 && !v.pokutaZaplacena);
             if (dluhy.Count == 0)
             {
                 Console.WriteLine("Čtenář nemá žádné nesplacené dluhy.");
@@ -441,9 +505,15 @@ static void ZamestnanecVypujckyMenu(Library library, User zamestnanec)
                 }
                 Console.WriteLine($"Celkem dluh: {celkem} CZK");
                 Console.WriteLine("Označit vše jako zaplaceno? [Y/N]");
-                if (Console.ReadKey(intercept: true).Key == ConsoleKey.Y)
+                if (Console.ReadKey().Key == ConsoleKey.Y)
                 {
-                    dluhy.ForEach(v => v.pokutaZaplacena = true);
+                    dluhy.ForEach(v =>
+                    {
+                        v.pokutaZaplacena = true;
+                        colVypujcky.ReplaceOne(
+                            Builders<Vypujcka>.Filter.Eq(x => x.Id, v.Id),
+                            v);
+                    });
                     Console.WriteLine("Dluh označen jako zaplacený.");
                 }
             }
@@ -452,11 +522,14 @@ static void ZamestnanecVypujckyMenu(Library library, User zamestnanec)
     }
 }
 
-static void CtenarVypujckyMenu(Library library, User ctenar)
+static void CtenarVypujckyMenu(
+    Library library, User ctenar,
+    IMongoCollection<Vypujcka> colVypujcky,
+    IMongoCollection<Rezervace> colRezervace)
 {
     Console.Clear();
     Console.WriteLine("[M] Moje výpůjčky   [P] Požádat o prodloužení   [R] Moje rezervace   [D] Moje dluhy");
-    var volba = Console.ReadKey(intercept: true);
+    var volba = Console.ReadKey();
     Console.WriteLine();
 
     switch (volba.Key)
@@ -464,12 +537,22 @@ static void CtenarVypujckyMenu(Library library, User ctenar)
         case ConsoleKey.M:
             Console.Clear();
             Console.WriteLine("=== Moje výpůjčky ===");
-            var mojVyp = library.vypujcky.FindAll(v => v.ctenar == ctenar && !v.vraceno);
+            var mojVyp = library.vypujcky.FindAll(v => v.ctenar.Id == ctenar.Id && !v.vraceno);
             if (mojVyp.Count == 0) Console.WriteLine("Žádné aktivní výpůjčky.");
             foreach (Vypujcka v in mojVyp)
             {
                 bool poTerminu = DateTime.Today > v.datumVraceni;
                 Console.WriteLine($"{v.exemplar.name} [{v.exemplar.serial_number}] | Vrátit do: {v.datumVraceni:d} | Prodlouženo: {v.pocetProdlouzeni}× {(poTerminu ? " PO TERMÍNU" : "")}");
+            }
+            Console.WriteLine("[H]Historie výpůjček");
+            var volbaHistorie = Console.ReadKey();
+            if(volbaHistorie.Key == ConsoleKey.H)
+            {
+                foreach(Vypujcka vypujcka in library.vypujcky)
+                {
+                    bool poTerminu = DateTime.Today > vypujcka.datumVraceni;
+                    Console.WriteLine($"{vypujcka.exemplar.name} [{vypujcka.exemplar.serial_number}] {(vypujcka.vraceno ? $"vraceno {vypujcka.datumSkutecnehoVraceni}" : "Stale vypujceno")} Prodlouženo: {vypujcka.pocetProdlouzeni}  {(poTerminu ? " PO TERMÍNU" : "")}");
+                }
             }
             Console.ReadKey();
             break;
@@ -478,18 +561,18 @@ static void CtenarVypujckyMenu(Library library, User ctenar)
             Console.Clear();
             Console.Write("Sériové číslo exempláře: ");
             string s = Console.ReadLine();
-            Vypujcka vyp = library.vypujcky.Find(v => v.exemplar.serial_number == s && v.ctenar == ctenar && !v.vraceno);
-            if (vyp == null) 
-            { 
-                Console.WriteLine("Výpůjčka nenalezena."); 
-                Console.ReadKey(); 
-                break; 
+            Vypujcka vyp = library.vypujcky.Find(v => v.exemplar.serial_number == s && v.ctenar.Id == ctenar.Id && !v.vraceno);
+            if (vyp == null)
+            {
+                Console.WriteLine("Výpůjčka nenalezena.");
+                Console.ReadKey();
+                break;
             }
-            if (vyp.pocetProdlouzeni >= 2) 
-            { 
+            if (vyp.pocetProdlouzeni >= 2)
+            {
                 Console.WriteLine("Limit prodloužení dosažen.");
                 Console.ReadKey();
-                break; 
+                break;
             }
             if (library.rezervace.Exists(r => r.ISBN == vyp.exemplar.ISBN && !r.splnena))
             {
@@ -498,6 +581,11 @@ static void CtenarVypujckyMenu(Library library, User ctenar)
             }
             vyp.datumVraceni = vyp.datumVraceni.AddDays(30);
             vyp.pocetProdlouzeni++;
+
+            colVypujcky.ReplaceOne(
+                Builders<Vypujcka>.Filter.Eq(v => v.Id, vyp.Id),
+                vyp);
+
             Console.WriteLine($"Prodlouženo. Nový termín: {vyp.datumVraceni:d}");
             Console.ReadKey();
             break;
@@ -505,15 +593,11 @@ static void CtenarVypujckyMenu(Library library, User ctenar)
         case ConsoleKey.R:
             Console.Clear();
             Console.WriteLine("=== Moje rezervace ===");
-            var mojRez = library.rezervace.FindAll(r => r.ctenar == ctenar && !r.splnena);
+            var mojRez = library.rezervace.FindAll(r => r.ctenar.Id == ctenar.Id && !r.splnena);
             if (mojRez.Count == 0)
-            {
                 Console.WriteLine("Žádné aktivní rezervace.");
-            }
             foreach (Rezervace r in mojRez)
-            {
                 Console.WriteLine($"ISBN: {r.ISBN} | Pořadí ve frontě: {r.poradí} | Stav: {r.Stav}");
-            }
             Console.ReadKey();
             break;
 
@@ -527,18 +611,18 @@ static void CtenarVypujckyMenu(Library library, User ctenar)
 }
 
 
-
 class Vypujcka
 {
-    public User ctenar;              
-    public Book exemplar;            
-    public DateTime datumVypujcky;   
-    public DateTime datumVraceni;    
-    public DateTime? datumSkutecnehoVraceni; 
-    public bool vraceno = false;     
-    public int pocetProdlouzeni = 0; 
-    public decimal pokuta = 0;       
-    public bool pokutaZaplacena = false; 
+    public ObjectId Id { get; set; }
+    public User ctenar;
+    public Book exemplar;
+    public DateTime datumVypujcky;
+    public DateTime datumVraceni;
+    public DateTime? datumSkutecnehoVraceni;
+    public bool vraceno = false;
+    public int pocetProdlouzeni = 0;
+    public decimal pokuta = 0;
+    public bool pokutaZaplacena = false;
 
     public Vypujcka(User ctenar, Book exemplar, DateTime datumVypujcky, DateTime datumVraceni)
     {
@@ -549,21 +633,15 @@ class Vypujcka
     }
 }
 
-
-
-
-
-
-
 class Rezervace
 {
-    public User ctenar;    
-    public string ISBN;    
-    public int poradí;     
-    public bool splnena;   
-    public string pripravena = "Čeká se na vrácení exempláře"; 
-
-    public string Stav => pripravena; //tohle mi poradil claude.ai
+    public ObjectId Id { get; set; }
+    public User ctenar;
+    public string ISBN;
+    public int poradí;
+    public bool splnena;
+    public string pripravena = "Čeká se na vrácení exempláře";
+    public string Stav => pripravena;
 
     public Rezervace(User ctenar, string ISBN, int poradi)
     {
@@ -577,14 +655,13 @@ class Rezervace
 class Library
 {
     public string name;
-
     public List<Book> books;
     public List<Book> exemplarsList;
     public List<User> readers;
     public List<User> employees;
     public List<User> users;
-    public List<Vypujcka> vypujcky;   
-    public List<Rezervace> rezervace; 
+    public List<Vypujcka> vypujcky;
+    public List<Rezervace> rezervace;
 
     public Library(string name)
     {
@@ -598,22 +675,26 @@ class Library
         rezervace = new List<Rezervace>();
     }
 
-    public void NewBook(string name, string author, string ISBN, int year, string genre, int exemplars, string serial_number)
+    public (Book, List<Book>) NewBook(string name, string author, string ISBN, int year, string genre, int exemplars, string serial_number)
     {
         Book book = new Book(name, author, ISBN, year, genre, exemplars, "0");
         books.Add(book);
+        List<Book> noveExemplare = new List<Book>();
         for (int i = 0; i < book.exemplars; i++)
         {
             Book exemplar = new Book(name, author, ISBN, year, genre, 1, ISBN + i);
             exemplarsList.Add(exemplar);
+            noveExemplare.Add(exemplar);
         }
+        return (book, noveExemplare);
     }
 
-    public void NewReader(string name, string surname, bool isEmployee, int readerNumber, string contact, string password)
+    public User NewReader(string name, string surname, bool isEmployee, int readerNumber, string contact, string password)
     {
         User user = new User(name, surname, false, readers.Count + 1, contact, password);
         readers.Add(user);
         users.Add(user);
+        return user;
     }
 
     public void NewEmployee(string name, string surname, bool isEmployee, int readerNumber, string contact, string password)
@@ -633,13 +714,15 @@ class Library
         return exemplarsList.FindAll(e => e.ISBN == ISBN && !e.isLoaned).Count;
     }
 
-    public void VytvorRezervaci(User ctenar, string ISBN)
+    public Rezervace VytvorRezervaci(User ctenar, string ISBN)
     {
         int poradi = rezervace.FindAll(r => r.ISBN == ISBN && !r.splnena).Count + 1;
-        rezervace.Add(new Rezervace(ctenar, ISBN, poradi));
+        Rezervace rez = new Rezervace(ctenar, ISBN, poradi);
+        rezervace.Add(rez);
+        return rez;
     }
 
-    public void AktualizujRezervacePoDostupcnosti(string ISBN)
+    public void AktualizujRezervacePoDostupcnosti(string ISBN, IMongoCollection<Rezervace> colRezervace)
     {
         Rezervace prvni = rezervace
             .FindAll(r => r.ISBN == ISBN && !r.splnena)
@@ -649,6 +732,9 @@ class Library
         if (prvni != null)
         {
             prvni.pripravena = "Připraveno k vyzvednutí";
+            colRezervace.ReplaceOne(
+                Builders<Rezervace>.Filter.Eq(r => r.Id, prvni.Id),
+                prvni);
             Console.WriteLine($"Upozornění: Čtenář {prvni.ctenar.name} {prvni.ctenar.surname} má rezervaci na tuto knihu – exemplář je nyní připraven k vyzvednutí.");
         }
     }
@@ -658,14 +744,11 @@ class Library
         decimal celkem = 0;
         foreach (Vypujcka v in vypujcky)
         {
-            if (v.ctenar != ctenar) continue;
-
+            if (v.ctenar.Id != ctenar.Id) continue;
             if (!v.pokutaZaplacena)
             {
                 if (v.vraceno && v.pokuta > 0)
-                {
                     celkem += v.pokuta;
-                }
                 else if (!v.vraceno && DateTime.Today > v.datumVraceni)
                 {
                     int dny = (DateTime.Today - v.datumVraceni).Days;
@@ -679,6 +762,7 @@ class Library
 
 class User
 {
+    public ObjectId Id { get; set; }
     public string name;
     public string surname;
     public bool isEmployee;
@@ -699,6 +783,7 @@ class User
 
 class Book
 {
+    public ObjectId Id { get; set; }
     public string name;
     public string author;
     public string ISBN;
