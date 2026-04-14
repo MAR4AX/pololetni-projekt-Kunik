@@ -1,0 +1,27 @@
+Employee:
+
+ name:"Marek"
+  surname:"Kuník"
+  isEmployee:true
+  readerNumber:0
+  contact:"email@example.com"
+  password:"heslo123"
+
+Reader:
+
+  name: "Josef"
+  surname: "Novak"
+  isEmployee: false
+  readerNumber: 1
+  contact: "pepa.novak@gmail.com"
+  password: "pepa8"
+
+Book:
+  name: "Proměna"
+  author: "Franz Kafka"
+  ISBN: "9788072534678"
+  year: 1915
+  genre: "novela"
+  exemplars: 3
+  serial_number": "0"
+  isLoaned: false
