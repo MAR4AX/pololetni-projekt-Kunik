@@ -104,15 +104,9 @@ while (true)
                     int volne = library.PocetVolnychExemplaru(book.ISBN);
                     Console.WriteLine($"Název: {book.name}, Autor: {book.author}, Rok: {book.year}, ISBN: {book.ISBN}, Žánr: {book.genre}, Exemplářů celkem: {book.exemplars}, Volných: {volne}");
                 }
+                if (nalezeneKnihy.Count > 0) found = true;
 
-                if (!found)
-                {
-                    Console.WriteLine("Kniha nenalezena.");
-                    Console.WriteLine();
-                    Console.WriteLine("Zmáčkněte libovolnou klávesu...");
-                    Console.ReadKey();
-                    break;
-                }
+                
 
                 if (!loggedUser.isEmployee)
                 {
@@ -162,12 +156,20 @@ while (true)
                             if (Console.ReadKey().Key == ConsoleKey.Y)
                             {
                                 Rezervace novaRez = library.VytvorRezervaci(loggedUser, zvoleneISBN);
-                                colRezervace.InsertOne(novaRez); 
                                 Console.WriteLine($"Rezervace vytvořena. Vaše pořadí: {aktualniPoradi}.");
                                 Console.WriteLine("Budete upozorněni, jakmile bude exemplář k dispozici.");
                             }
                         }
                     }
+                }
+
+                if (!found)
+                {
+                    Console.WriteLine("Kniha nenalezena.");
+                    Console.WriteLine();
+                    Console.WriteLine("Zmáčkněte libovolnou klávesu...");
+                    Console.ReadKey();
+                    break;
                 }
 
                 Console.WriteLine();
@@ -218,8 +220,6 @@ while (true)
                         Console.Write("Heslo: ");
                         string iPassword = Console.ReadLine();
                         User novyCtenar = library.NewReader(iName, iSurname, false, 0, iContact, iPassword);
-                        colReaders.InsertOne(novyCtenar);
-                        colUsers.InsertOne(novyCtenar);
                         Console.WriteLine("Čtenář přidán.");
                         Console.ReadKey();
                         break;
@@ -267,8 +267,6 @@ while (true)
                         Console.Write("Počet exemplářů: ");
                         int bEx = Convert.ToInt32(Console.ReadLine());
                         var (novaKniha, noveExemplare) = library.NewBook(bName, bAuthor, bISBN, bYear, bGenre, bEx, "0");
-                        colBooks.InsertOne(novaKniha);          
-                        colExemplars.InsertMany(noveExemplare); 
                         Console.WriteLine("Kniha přidána.");
                         Console.ReadKey();
                         break;
@@ -347,7 +345,6 @@ void ZamestnanecVypujckyMenu(
                 if (Console.ReadKey().Key == ConsoleKey.Y)
                 {
                     Rezervace novaRez = library.VytvorRezervaci(ctenar, vypISBN);
-                    colRezervace.InsertOne(novaRez); 
                     Console.WriteLine("Rezervace vytvořena – čtenář bude zařazen do fronty.");
                 }
                 Console.ReadKey();
